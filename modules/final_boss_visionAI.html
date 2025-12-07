@@ -2,64 +2,77 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>NEMESIS: FASE FINAL</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- TensorFlow.js (Versiones Estables) -->
+    <!-- TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@3.11.0/dist/tf-core.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@3.11.0/dist/tf-converter.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@3.11.0/dist/tf-backend-webgl.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.6/dist/pose-detection.min.js"></script>
 
     <style>
-        body { background: #050505; color: #0f0; overflow: hidden; font-family: 'Courier New', monospace; user-select: none; }
+        body { background: #000; color: #0f0; overflow: hidden; font-family: 'Courier New', monospace; user-select: none; margin: 0; padding: 0; }
         
-        /* Contenedores */
-        #game-layer { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        video { position: absolute; min-width: 100%; min-height: 100%; width: auto; height: auto; object-fit: cover; opacity: 0.6; transform: scaleX(-1); }
-        canvas { position: absolute; min-width: 100%; min-height: 100%; width: auto; height: auto; object-fit: cover; transform: scaleX(-1); }
+        /* LAYOUT FULLSCREEN REAL */
+        #game-layer { 
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+            z-index: 1; 
+        }
         
+        /* Video y Canvas superpuestos y escalados para cubrir todo */
+        video, canvas { 
+            position: absolute; top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            object-fit: cover; /* Clave para que no se deforme */
+            transform: scaleX(-1); /* Espejo */
+        }
+        video { opacity: 0.6; }
+
         /* UI HUD */
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; }
+        #ui-layer { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            pointer-events: none; z-index: 20; 
+            display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box;
+        }
         
-        /* Texto de Acción Gigante */
+        /* Texto de Acción */
         #prompt-container {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; width: 100%;
+            text-align: center; width: 100%; text-shadow: 0 0 10px #000;
         }
-        .action-big { font-size: 5rem; font-weight: 900; text-shadow: 0 0 20px #000; display: block; line-height: 1; }
-        .action-sub { font-size: 2rem; font-weight: bold; text-shadow: 0 0 10px #000; display: block; margin-top: 10px; }
+        .action-big { font-size: 15vw; font-weight: 900; display: block; line-height: 1; transition: transform 0.1s; }
+        .action-sub { font-size: 5vw; font-weight: bold; display: block; margin-top: 10px; color: #fff; }
         
         /* Botón Start */
-        #start-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        button { padding: 15px 40px; font-size: 20px; background: #00cc00; color: white; border: none; font-weight: bold; cursor: pointer; border: 2px solid #fff; transition: transform 0.2s; }
+        #start-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+        button { padding: 20px 50px; font-size: 1.5rem; background: #00cc00; color: white; border: 2px solid white; font-weight: bold; cursor: pointer; border-radius: 10px; margin-top: 20px; }
         button:active { transform: scale(0.95); }
 
         /* Pantalla Victoria */
-        #win-screen { position: fixed; inset: 0; background: #000; z-index: 60; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        .ko-text { font-size: 8rem; color: #ff0000; font-weight: 900; animation: pulse-ko 1s infinite; text-shadow: 0 0 30px red; }
-        @keyframes pulse-ko { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        #win-screen { position: fixed; inset: 0; background: #000; z-index: 60; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .ko-text { font-size: 25vw; color: #ff0000; font-weight: 900; animation: pulse-ko 1s infinite; text-shadow: 0 0 30px red; line-height: 0.8; }
+        @keyframes pulse-ko { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
         
-        /* Debug */
-        #debug-log { position: absolute; bottom: 5px; left: 5px; font-size: 10px; color: yellow; opacity: 0.7; }
+        #debug-log { position: absolute; bottom: 10px; left: 10px; font-size: 12px; color: yellow; background: rgba(0,0,0,0.5); padding: 5px; }
     </style>
 </head>
 <body>
 
     <!-- PANTALLA INICIO -->
     <div id="start-overlay">
-        <h1 class="text-4xl text-green-500 mb-2 font-bold tracking-widest">SISTEMA NEMESIS</h1>
-        <p class="text-gray-400 mb-8">Requiere acceso a cámara y cuerpo completo.</p>
+        <h1 class="text-4xl md:text-6xl text-green-500 mb-4 font-bold tracking-widest">NEMESIS</h1>
+        <p class="text-gray-300 text-lg mb-8 max-w-md">Coloca el móvil apoyado y aléjate hasta que se te vea de cintura para arriba.</p>
         <button onclick="initSystem()">INICIAR COMBATE</button>
     </div>
 
     <!-- PANTALLA VICTORIA -->
     <div id="win-screen">
         <div class="ko-text">K.O.</div>
-        <h2 class="text-white text-2xl mt-4 tracking-widest">NEMESIS ELIMINADO</h2>
-        <p class="text-yellow-500 mt-8 text-xl animate-bounce tracking-widest">HA SOLTADO UN OBJETO...</p>
+        <h2 class="text-white text-2xl md:text-4xl mt-4 tracking-widest font-bold">OBJETIVO ELIMINADO</h2>
+        <p class="text-yellow-500 mt-8 text-xl animate-pulse tracking-widest">>> OBJETO DESCONOCIDO SOLTADO <<</p>
+        <button onclick="location.href='tomb_treasure.html'" style="margin-top: 40px; background: transparent; border: 1px solid #0f0; color: #0f0;">RECOGER RECOMPENSA</button>
     </div>
 
     <!-- JUEGO -->
@@ -71,43 +84,44 @@
     <!-- HUD -->
     <div id="ui-layer" style="display:none;">
         <!-- Barra Vida -->
-        <div class="w-full max-w-3xl mx-auto">
+        <div class="w-full max-w-4xl mx-auto">
             <div class="flex justify-between text-white font-bold text-xl drop-shadow-md">
-                <span class="text-red-500">BOSS: NEMESIS</span>
-                <span id="score-txt">0% DAÑO</span>
+                <span class="text-red-500 text-2xl">BOSS</span>
+                <span id="score-txt">100%</span>
             </div>
-            <div class="w-full h-8 border-4 border-red-900 bg-black mt-1 relative rounded">
+            <div class="w-full h-6 md:h-10 border-4 border-red-900 bg-black mt-2 relative rounded shadow-lg shadow-red-900/50">
                 <div id="hp-bar" class="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-300" style="width: 100%"></div>
             </div>
         </div>
 
         <!-- Instrucciones Centrales -->
         <div id="prompt-container">
-            <span id="main-action" class="action-big text-white">CALIBRANDO</span>
-            <span id="sub-action" class="action-sub text-yellow-400">ESPERANDO</span>
+            <span id="main-action" class="action-big text-yellow-400">CALIBRANDO</span>
+            <span id="sub-action" class="action-sub">...</span>
         </div>
 
-        <!-- Debug -->
-        <div id="debug-log">Inicializando...</div>
+        <div id="debug-log">Iniciando...</div>
     </div>
 
     <script>
-        // --- CONFIGURACIÓN MAESTRA ---
-        const TOTAL_MOVES = 30;       // Número total de golpes para ganar
-        const DODGE_CHANCE = 0.15;    // 15% Probabilidad de esquiva
-        const CALIBRATION_TIME = 150; // Frames para estabilizar calibración
-
-        // --- VARIABLES DE ESTADO ---
-        let detector, video, canvas, ctx;
-        let state = 'INIT'; // INIT, CALIBRATING, PLAYING, WIN
-        let score = 0;
-        let currentOrder = null; // { type: 'JAB', side: 'LEFT' }
-        let isMirror = false; 
-        let isHitProcessing = false; // Bloqueo para evitar doble daño
+        // --- CONFIGURACIÓN ---
+        const TOTAL_MOVES = 30;       
+        const DODGE_CHANCE = 0.20;    // 20% Probabilidad esquiva
         
-        // Historial para velocidad
+        // --- ESTADO ---
+        let detector, video, canvas, ctx;
+        let state = 'INIT';
+        let score = 0;
+        let currentOrder = null; 
+        let isMirror = false; 
+        let isHitProcessing = false;
+        
+        // Historial y Referencias
         let lastPositions = {}; 
-        let centerReferenceX = 0; 
+        let refPoints = { noseY: 0, shoulderY: 0, shoulderWidth: 0 };
+        
+        // Flags para evitar conflictos
+        let punchCooldown = 0; // Si golpeas, no puedes esquivar por un momento
 
         // --- AUDIO ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -115,23 +129,19 @@
             if(audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator();
             const g = audioCtx.createGain();
+            const t = audioCtx.currentTime;
             
             if(type === 'hit') { 
-                osc.type = 'square'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
-                g.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                g.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+                osc.type = 'square'; osc.frequency.setValueAtTime(100, t); osc.frequency.linearRampToValueAtTime(50, t+0.1);
+                g.gain.setValueAtTime(0.5, t); g.gain.linearRampToValueAtTime(0, t+0.1);
+                osc.start(t); osc.stop(t+0.1);
             } else if (type === 'voice') { 
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-                g.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                g.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, t);
+                g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t+0.3);
+                osc.start(t); osc.stop(t+0.3);
             } else if (type === 'calibrated') {
-                osc.type = 'sine'; osc.frequency.setValueAtTime(600, audioCtx.currentTime);
-                osc.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.3);
-                g.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+                osc.type = 'sine'; osc.frequency.setValueAtTime(440, t); osc.frequency.linearRampToValueAtTime(880, t+0.3);
+                g.gain.setValueAtTime(0.2, t); osc.start(t); osc.stop(t+0.3);
             }
             osc.connect(g); g.connect(audioCtx.destination);
         }
@@ -147,13 +157,15 @@
                 canvas = document.getElementById('output');
                 ctx = canvas.getContext('2d');
 
+                // Forzamos resolución baja para rendimiento IA, pero CSS la escala
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'user', width: 640, height: 480 } 
+                    video: { facingMode: 'user', width: {ideal: 640}, height: {ideal: 480} } 
                 });
                 video.srcObject = stream;
                 
                 await new Promise(r => video.onloadedmetadata = () => {
                     video.play();
+                    // Ajustamos el tamaño interno del canvas al del video para dibujar sobre él correctamente
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     r();
@@ -163,12 +175,12 @@
                 const model = poseDetection.SupportedModels.MoveNet;
                 detector = await poseDetection.createDetector(model, { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING });
                 
-                log("IA Lista. Iniciando Calibración...");
+                log("Calibrando...");
                 startCalibration();
                 loop();
 
             } catch (e) {
-                alert("Error: " + e.message);
+                alert("Error cámara: " + e.message);
                 location.reload();
             }
         }
@@ -181,12 +193,12 @@
 
             const poses = await detector.estimatePoses(video);
             
+            // Limpiamos canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             if (poses.length > 0) {
                 const kp = poses[0].keypoints;
-                // Dibujar esqueleto fino y preciso
-                drawSkeleton(kp);
+                drawSkeleton(kp); // Feedback visual
                 
                 if (state === 'CALIBRATING') processCalibration(kp);
                 else if (state === 'PLAYING') processGameplay(kp);
@@ -195,10 +207,10 @@
             requestAnimationFrame(loop);
         }
 
-        // --- FASE 1: CALIBRACIÓN ---
+        // --- CALIBRACIÓN ---
         function startCalibration() {
             state = 'CALIBRATING';
-            updatePrompt("LEVANTA TU", "MANO DERECHA", "yellow");
+            updatePrompt("LEVANTA", "MANO DERECHA", "yellow");
         }
 
         let calibrationFrames = 0;
@@ -206,28 +218,32 @@
             const lW = kp.find(k => k.name === 'left_wrist');
             const rW = kp.find(k => k.name === 'right_wrist');
             const nose = kp.find(k => k.name === 'nose');
+            const lS = kp.find(k => k.name === 'left_shoulder');
+            const rS = kp.find(k => k.name === 'right_shoulder');
 
-            if(!lW || !rW || !nose) return;
+            if(!lW || !rW || !nose || !lS || !rS) return;
+
+            // Guardar referencias corporales
+            refPoints.noseY = nose.y;
+            refPoints.shoulderY = (lS.y + rS.y) / 2; // Altura media hombros
+            refPoints.shoulderWidth = Math.abs(lS.x - rS.x); // Ancho espalda para calcular distancias relativas
 
             const leftIsUp = lW.y < nose.y - 50;
             const rightIsUp = rW.y < nose.y - 50;
 
             if (leftIsUp || rightIsUp) {
                 calibrationFrames++;
-                if(calibrationFrames > 30) {
+                if(calibrationFrames > 40) {
                     if (leftIsUp) isMirror = true; 
                     else isMirror = false; 
 
                     playTone('calibrated');
                     state = 'PLAYING';
-                    log(`Calibrado. Modo Espejo: ${isMirror}`);
+                    log(`Modo Espejo: ${isMirror}. Referencias guardadas.`);
                     
-                    centerReferenceX = nose.x;
-                    
-                    // Resetear historial para evitar salto de daño inicial
+                    // Reset historial
                     lastPositions = { lx: lW.x, rx: rW.x, ny: nose.y };
                     
-                    // Pausa de 2 segundos antes del primer golpe para prepararse
                     updatePrompt("PREPÁRATE", "...", "white");
                     setTimeout(nextMove, 2000);
                 }
@@ -236,111 +252,155 @@
             }
         }
 
-        // --- FASE 2: JUEGO ---
+        // --- JUEGO ---
         function nextMove() {
             if(state !== 'PLAYING') return;
-            
-            isHitProcessing = false; // Desbloquear daño para el nuevo movimiento
+            isHitProcessing = false;
 
+            // Probabilidades
             const type = Math.random() > DODGE_CHANCE ? 'GOLPE' : 'ESQUIVA';
             const side = Math.random() > 0.5 ? 'IZQUIERDA' : 'DERECHA';
 
             let actionName = "JAB";
+            // 50/50 entre Jab y Gancho si es golpe
             if (type === 'GOLPE' && Math.random() > 0.5) actionName = "GANCHO";
             if (type === 'ESQUIVA') actionName = "ESQUIVA";
 
             currentOrder = { type: actionName, side: side };
 
-            let color = "white";
+            // Colores UI
+            let color = "#fff";
             if (side === 'IZQUIERDA') color = "#00ffff"; // Cyan
             else color = "#ff00ff"; // Magenta
 
-            updatePrompt(actionName, side, color);
+            // Texto Grande
+            let mainTxt = actionName;
+            let subTxt = side;
+            
+            if(actionName === "ESQUIVA") {
+                mainTxt = "¡ABAJO!";
+                subTxt = "ESQUIVA " + side;
+            }
+
+            updatePrompt(mainTxt, subTxt, color);
             playTone('voice');
         }
 
         function processGameplay(kp) {
-            // Mapeo de puntos siempre necesario para actualizar el historial
+            // Cooldown de puñetazo para evitar falsas esquivas
+            if (punchCooldown > 0) punchCooldown--;
+
+            // Mapeo
             const rawLeft = kp.find(k => k.name === 'left_wrist');
             const rawRight = kp.find(k => k.name === 'right_wrist');
             const nose = kp.find(k => k.name === 'nose');
+            const lS = kp.find(k => k.name === 'left_shoulder');
+            const rS = kp.find(k => k.name === 'right_shoulder');
 
-            if(!rawLeft || !rawRight || !nose) return;
+            if(!rawLeft || !rawRight || !nose || !lS || !rS) return;
 
+            // Determinar qué muñeca es cual según el espejo
             let userLeftWrist, userRightWrist;
-            
-            if (isMirror) {
-                userLeftWrist = rawRight;
-                userRightWrist = rawLeft;
-            } else {
-                userLeftWrist = rawLeft;
-                userRightWrist = rawRight;
-            }
+            if (isMirror) { userLeftWrist = rawRight; userRightWrist = rawLeft; } 
+            else { userLeftWrist = rawLeft; userRightWrist = rawRight; }
 
-            // CRÍTICO: Calcular velocidad comparando con frame anterior
-            // Si lastPositions está vacío (primer frame), usar posición actual (vel = 0)
+            // Cálculos de Velocidad
             const prevLx = lastPositions.lx || userLeftWrist.x;
             const prevRx = lastPositions.rx || userRightWrist.x;
-            const prevNy = lastPositions.ny || nose.y;
-
             const vxL = Math.abs(userLeftWrist.x - prevLx);
             const vxR = Math.abs(userRightWrist.x - prevRx);
-            const dxNose = nose.x - centerReferenceX; 
-
-            // Actualizar historial SIEMPRE, haya orden o no.
-            // Esto evita el "teletransporte" y la velocidad fantasma.
+            
+            // Actualizar historial
             lastPositions = { lx: userLeftWrist.x, rx: userRightWrist.x, ny: nose.y };
 
-            // Si no hay orden activa o ya hemos procesado el golpe, salir
             if(!currentOrder || isHitProcessing) return;
 
             let hit = false;
-            const punchThreshold = 20; 
-            const dodgeThreshold = 50; 
+            
+            // Altura de referencia (Pecho/Hombros)
+            // Se actualiza suavemente para adaptarse si el usuario se mueve
+            refPoints.shoulderY = (refPoints.shoulderY * 0.9) + (((lS.y + rS.y)/2) * 0.1); 
+            
+            const punchThreshold = 15; // Velocidad para considerar golpe
+            const activeWrist = currentOrder.side === 'IZQUIERDA' ? userLeftWrist : userRightWrist;
+            const activeVel = currentOrder.side === 'IZQUIERDA' ? vxL : vxR;
 
-            if (currentOrder.type === 'JAB' || currentOrder.type === 'GANCHO') {
-                if (currentOrder.side === 'IZQUIERDA' && vxL > punchThreshold) hit = true;
-                if (currentOrder.side === 'DERECHA' && vxR > punchThreshold) hit = true;
-            } 
-            else if (currentOrder.type === 'ESQUIVA') {
-                if (currentOrder.side === 'IZQUIERDA') {
-                     if (isMirror && dxNose > dodgeThreshold) hit = true;
-                     if (!isMirror && dxNose < -dodgeThreshold) hit = true;
+            // --- LÓGICA DETECCIÓN ---
+
+            if (currentOrder.type === 'JAB') {
+                // JAB: Velocidad alta + Muñeca a la altura del hombro o superior (Y menor)
+                // Se permite un margen pequeño hacia abajo, pero no mucho
+                if (activeVel > punchThreshold && activeWrist.y < (refPoints.shoulderY + 50)) {
+                    hit = true;
+                    punchCooldown = 20; // Bloquear esquiva 20 frames
                 }
-                if (currentOrder.side === 'DERECHA') {
-                     if (isMirror && dxNose < -dodgeThreshold) hit = true;
-                     if (!isMirror && dxNose > dodgeThreshold) hit = true;
+            } 
+            else if (currentOrder.type === 'GANCHO') {
+                // GANCHO: Velocidad alta + Muñeca pasa por DEBAJO del pecho significativamente
+                if (activeVel > punchThreshold && activeWrist.y > (refPoints.shoulderY + 60)) {
+                    hit = true;
+                    punchCooldown = 20;
+                }
+            }
+            else if (currentOrder.type === 'ESQUIVA') {
+                // ESQUIVA: Solo si no estamos golpeando (punchCooldown == 0)
+                if (punchCooldown === 0) {
+                    // Nariz baja significativamente respecto a la referencia calibrada inicial
+                    // O detectamos que la nariz está muy por debajo de los hombros actuales
+                    const squatThreshold = refPoints.shoulderWidth * 0.5; // Bajar media espalda
+                    
+                    // ¿Nariz más baja que los hombros + margen?
+                    if (nose.y > (refPoints.shoulderY + 30)) {
+                        // Comprobar lado (Nariz se desplaza del centro)
+                        // Si espejo: Izq = +X. Si no: Izq = -X.
+                        const centerX = (lS.x + rS.x) / 2;
+                        const dx = nose.x - centerX;
+                        
+                        if (currentOrder.side === 'IZQUIERDA') {
+                            if ((isMirror && dx > 20) || (!isMirror && dx < -20)) hit = true;
+                        } else {
+                            if ((isMirror && dx < -20) || (!isMirror && dx > 20)) hit = true;
+                        }
+                        
+                        // Simplificación: Si baja mucho, cuenta como esquiva general para no frustrar
+                        if (nose.y > refPoints.shoulderY + 80) hit = true; 
+                    }
                 }
             }
 
             if (hit) {
-                isHitProcessing = true; // Bloqueo inmediato para evitar doble daño
+                isHitProcessing = true;
                 playTone('hit');
                 score++;
                 updateUI();
                 
-                // Limpiar pantalla
-                document.getElementById('main-action').style.display = 'none';
-                document.getElementById('sub-action').style.display = 'none';
+                // Efecto visual en texto
+                const mainAction = document.getElementById('main-action');
+                mainAction.style.transform = "scale(1.5)";
+                mainAction.style.color = "#0f0"; // Verde confirmación
                 
                 if(score >= TOTAL_MOVES) {
-                    doWin();
+                    setTimeout(doWin, 500);
                 } else {
-                    currentOrder = null; // Quitar orden actual
-                    setTimeout(nextMove, 800);
+                    setTimeout(() => {
+                        mainAction.style.transform = "scale(1)";
+                        currentOrder = null;
+                        document.getElementById('main-action').innerText = "";
+                        document.getElementById('sub-action').innerText = "";
+                        setTimeout(nextMove, 600); // Pausa ritmo
+                    }, 200);
                 }
             }
         }
 
-        // --- UI & WIN ---
+        // --- UI ---
         function updatePrompt(main, sub, color) {
             const m = document.getElementById('main-action');
             const s = document.getElementById('sub-action');
             m.innerText = main;
             s.innerText = sub;
             m.style.color = color;
-            m.style.display = 'block';
-            s.style.display = 'block';
+            m.style.transform = "scale(1)";
         }
 
         function updateUI() {
@@ -352,30 +412,33 @@
         function doWin() {
             state = 'WIN';
             video.pause();
-            video.srcObject.getTracks().forEach(t => t.stop());
+            // Detener stream para liberar cámara
+            if(video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
             
-            document.getElementById('game-layer').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'none';
             document.getElementById('win-screen').style.display = 'flex';
         }
 
-        // --- UTILIDADES GRÁFICAS ---
+        // --- DIBUJO ---
         function drawSkeleton(kp) {
+            // Dibujar puntos para referencia visual del usuario
             kp.forEach(p => {
                 if(p.score > 0.4) {
                     ctx.beginPath();
-                    ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
+                    ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI); // Puntos pequeños
                     ctx.fillStyle = '#0f0';
                     ctx.fill();
-                    ctx.strokeStyle = 'black';
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
                 }
             });
+            
+            // Conectar brazos
             connect(kp, 'left_shoulder', 'left_elbow');
             connect(kp, 'left_elbow', 'left_wrist');
             connect(kp, 'right_shoulder', 'right_elbow');
             connect(kp, 'right_elbow', 'right_wrist');
+            
+            // Dibujar línea de hombros (referencia)
+            connect(kp, 'left_shoulder', 'right_shoulder');
         }
 
         function connect(kp, nameA, nameB) {
@@ -385,7 +448,7 @@
                 ctx.beginPath();
                 ctx.moveTo(a.x, a.y);
                 ctx.lineTo(b.x, b.y);
-                ctx.strokeStyle = 'lime';
+                ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
                 ctx.lineWidth = 2;
                 ctx.stroke();
             }
