@@ -20,7 +20,6 @@
             z-index: 1; 
         }
         
-        /* Video silenciado y oculto */
         video { position: absolute; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
         canvas { display: block; width: 100%; height: 100%; transform: scaleX(-1); }
 
@@ -37,6 +36,7 @@
         .action-big { font-size: 12vw; font-weight: 900; display: block; line-height: 1; transition: transform 0.1s; }
         .action-sub { font-size: 5vw; font-weight: bold; display: block; margin-top: 10px; color: #fff; }
         
+        /* Barra de Tiempo */
         #action-timer-bar {
             width: 50%; height: 10px; background: #555; margin: 20px auto 0;
             border-radius: 5px; overflow: hidden; display: none;
@@ -44,6 +44,16 @@
         #action-timer-fill {
             width: 100%; height: 100%; background: #fff; transform-origin: left;
         }
+
+        /* BONUS MODE UI */
+        #bonus-container {
+            display: none; flex-direction: row; justify-content: center; gap: 10px; margin-top: 20px;
+        }
+        .bonus-item {
+            padding: 10px; border: 2px solid #fff; color: #fff; font-weight: bold; background: rgba(0,0,0,0.5); opacity: 0.5;
+        }
+        .bonus-active { opacity: 1; border-color: #0f0; background: rgba(0, 255, 0, 0.2); transform: scale(1.1); }
+        .bonus-done { opacity: 0.3; background: #0f0; border-color: #0f0; color: #000; }
 
         #start-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
         button { padding: 20px 50px; font-size: 1.5rem; background: #00cc00; color: white; border: 2px solid white; font-weight: bold; cursor: pointer; border-radius: 10px; margin-top: 20px; }
@@ -61,32 +71,6 @@
         .heal-effect { animation: pulse 0.5s; box-shadow: inset 0 0 50px #00ff00; }
         @keyframes shake { 0%, 100% { transform: translate(0,0); } 25% { transform: translate(10px,0); } 75% { transform: translate(-10px,0); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
-
-        /* QTE */
-        #qte-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100;
-            display: none; align-items: center; justify-content: center; cursor: pointer;
-        }
-        .qte-circle {
-            width: 200px; height: 200px; position: relative;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .qte-cross {
-            font-size: 100px; color: #fff; font-weight: 900; text-shadow: 0 0 20px #0f0;
-            z-index: 2; pointer-events: none;
-        }
-        .qte-progress {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            border-radius: 50%; border: 10px solid #333;
-            box-sizing: border-box;
-        }
-        .qte-fill {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            border-radius: 50%; border: 10px solid #0f0; border-top-color: transparent;
-            box-sizing: border-box; 
-            animation: spin-drain 4s linear forwards;
-        }
-        @keyframes spin-drain { 0% { transform: rotate(0deg); opacity: 1; } 100% { transform: rotate(360deg); opacity: 0; } }
     </style>
 </head>
 <body>
@@ -94,7 +78,7 @@
     <!-- PANTALLA INICIO -->
     <div id="start-overlay">
         <h1 class="text-4xl md:text-6xl text-green-500 mb-4 font-bold tracking-widest">NEMESIS</h1>
-        <p class="text-gray-300 text-lg mb-2 max-w-md">Coloca el móvil apoyado y aléjate hasta que se te vea de cintura para arriba.</p>
+        <p class="text-gray-300 text-lg mb-8 max-w-md">Coloca el móvil apoyado y aléjate hasta que se te vea de cintura para arriba.</p>
         <button onclick="initSystem()">INICIAR COMBATE</button>
     </div>
 
@@ -111,16 +95,6 @@
         <h2 class="text-red-600 text-4xl md:text-6xl mb-4 font-bold tracking-widest">SISTEMA CRÍTICO</h2>
         <p class="text-gray-400 mt-4">Has recibido demasiado daño.</p>
         <button onclick="location.reload()" style="background: red; border-color: red;">REINTENTAR</button>
-    </div>
-
-    <!-- QTE OVERLAY -->
-    <div id="qte-overlay" onclick="handleQTEClick()">
-        <div class="qte-circle">
-            <div class="qte-progress"></div>
-            <div id="qte-anim" class="qte-fill"></div>
-            <div class="qte-cross">+</div>
-        </div>
-        <p class="absolute bottom-20 text-white font-bold text-2xl animate-bounce">¡PULSA!</p>
     </div>
 
     <!-- JUEGO -->
@@ -158,6 +132,11 @@
             <span id="main-action" class="action-big text-yellow-400">CALIBRANDO</span>
             <span id="sub-action" class="action-sub">...</span>
             <div id="action-timer-bar"><div id="action-timer-fill"></div></div>
+            
+            <!-- Contenedor Bonus -->
+            <div id="bonus-container">
+                <!-- Se rellena dinámicamente -->
+            </div>
         </div>
 
         <div id="debug-log">Iniciando...</div>
@@ -166,13 +145,15 @@
     <script>
         // --- CONFIGURACIÓN ---
         const TOTAL_MOVES = 30;       
+        const DODGE_BASE_CHANCE = 0.25;
         const PLAYER_MAX_HP = 5; 
         const TIME_LIMIT_PUNCH = 5000; 
         const TIME_LIMIT_DODGE = 2500; 
+        const TIME_LIMIT_BONUS = 4000; // Tiempo total para el combo de 3
         
         // --- ESTADO ---
         let detector, video, canvas, ctx;
-        let state = 'INIT'; 
+        let state = 'INIT'; // INIT, CALIBRATING, PLAYING, BONUS, WIN, LOSE
         let score = 0;
         let playerHP = PLAYER_MAX_HP;
         let currentOrder = null; 
@@ -191,17 +172,22 @@
         let punchCooldown = 0; 
         let moveHistory = []; 
         let actionStartTime = 0;
-        
-        // Mecánicas
-        let streakCount = 0; 
-        let qteTimer = null;
-        let uiTimeout = null; // Control para mensajes UI
+        let uiTimeout = null;
 
-        // LISTA DE MOVIMIENTOS POSIBLES
+        // Bonus State
+        let bonusQueue = [];
+        let bonusIndex = 0;
+
         const ALL_MOVES = [
             { type: 'JAB', side: 'IZQUIERDA' }, { type: 'JAB', side: 'DERECHA' },
             { type: 'GANCHO', side: 'IZQUIERDA' }, { type: 'GANCHO', side: 'DERECHA' },
             { type: 'ESQUIVA', side: 'IZQUIERDA' }, { type: 'ESQUIVA', side: 'DERECHA' }
+        ];
+
+        // Solo golpes para el bonus
+        const STRIKE_MOVES = [
+            { type: 'JAB', side: 'IZQUIERDA' }, { type: 'JAB', side: 'DERECHA' },
+            { type: 'GANCHO', side: 'IZQUIERDA' }, { type: 'GANCHO', side: 'DERECHA' }
         ];
 
         // --- AUDIO ---
@@ -242,7 +228,7 @@
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: 'user', width: {ideal: 640}, height: {ideal: 480} },
-                    audio: false // Desactivamos audio para evitar pedir permiso innecesario
+                    audio: false
                 });
                 
                 video = document.getElementById('video');
@@ -292,53 +278,16 @@
 
         function log(msg) { document.getElementById('debug-log').innerText = msg; }
 
-        // --- QTE SYSTEM ---
-        function triggerQTE() {
-            if (state !== 'PLAYING') return;
-            state = 'QTE'; 
-            
-            const qte = document.getElementById('qte-overlay');
-            qte.style.display = 'flex';
-            
-            const fill = document.getElementById('qte-anim');
-            fill.style.animation = 'none';
-            fill.offsetHeight; 
-            fill.style.animation = 'spin-drain 4s linear forwards';
-
-            qteTimer = setTimeout(() => {
-                handleQTEFail();
-            }, 4000);
-        }
-
-        function handleQTEClick() {
-            if (state !== 'QTE') return;
-            clearTimeout(qteTimer);
-            
-            playTone('heal');
-            healPlayer(PLAYER_MAX_HP, "¡RECUPERACIÓN TOTAL!"); 
-            
-            document.getElementById('qte-overlay').style.display = 'none';
-            state = 'PLAYING';
-            setTimeout(nextMove, 2000); // Pausa larga tras curar
-        }
-
-        function handleQTEFail() {
-            document.getElementById('qte-overlay').style.display = 'none';
-            playTone('error');
-            state = 'PLAYING';
-            handleMiss("¡OPORTUNIDAD PERDIDA!");
-        }
-
         // --- BUCLE PRINCIPAL ---
         async function loop() {
             if(state === 'WIN' && !video.paused) return; 
 
             // Watchdog Anti-freeze
-            if (state === 'PLAYING' && isHitProcessing) {
+            if ((state === 'PLAYING' || state === 'BONUS') && isHitProcessing) {
                 if (Date.now() - lastProcessTime > 2000) {
                     console.warn("Watchdog: Resetting stuck state");
                     isHitProcessing = false;
-                    resetRound();
+                    if(state === 'PLAYING') resetRound();
                 }
             }
 
@@ -355,16 +304,25 @@
                     drawSkeleton(kp); 
                     if (state === 'CALIBRATING') processCalibration(kp);
                     else if (state === 'GUARD_CHECK') processGuardCheck(kp);
-                    else if (state === 'PLAYING') processGameplay(kp);
+                    else if (state === 'PLAYING' || state === 'BONUS') processGameplay(kp);
                 }
             }
 
-            if (state === 'PLAYING' && currentOrder && !isHitProcessing) {
+            // Barra Tiempo
+            if ((state === 'PLAYING' || state === 'BONUS') && currentOrder && !isHitProcessing) {
                 const elapsed = Date.now() - actionStartTime;
-                const limit = currentOrder.type === 'ESQUIVA' ? TIME_LIMIT_DODGE : TIME_LIMIT_PUNCH;
+                let limit = 0;
+                
+                if (state === 'BONUS') limit = TIME_LIMIT_BONUS;
+                else limit = currentOrder.type === 'ESQUIVA' ? TIME_LIMIT_DODGE : TIME_LIMIT_PUNCH;
+                
                 const pct = Math.max(0, 100 - ((elapsed / limit) * 100));
                 document.getElementById('action-timer-fill').style.width = `${pct}%`;
-                if (elapsed > limit) handleMiss("¡LENTO!");
+                
+                if (elapsed > limit) {
+                    if (state === 'BONUS') failBonus();
+                    else handleMiss("¡LENTO!");
+                }
             }
 
             requestAnimationFrame(loop);
@@ -436,56 +394,62 @@
             }
         }
 
-        // --- FASE 2: LÓGICA DE PROBABILIDAD AVANZADA ---
+        // --- FASE 2: LÓGICA DE JUEGO ---
+        
         function getNextMove() {
-            // Clonar lista para asignar pesos
             let candidates = ALL_MOVES.map(m => ({ ...m, weight: 1.0 }));
 
-            // Aplicar penalizaciones por historial (0 es el más reciente)
             moveHistory.forEach((pastMove, index) => {
-                const recencyMult = 1 / (index + 1); // 1.0, 0.5, 0.33...
-                
+                const recencyMult = 1 / (index + 1);
                 candidates.forEach(cand => {
                     if (cand.type === pastMove.type) {
-                        cand.weight -= 0.3 * recencyMult; // Penalizar mismo tipo
+                        cand.weight -= 0.3 * recencyMult; 
                         if (cand.side === pastMove.side) {
-                            cand.weight -= 0.3 * recencyMult; // Penalizar extra mismo lado
+                            cand.weight -= 0.3 * recencyMult; 
                         }
                     }
                 });
             });
 
-            // Normalizar y evitar pesos negativos
             let totalWeight = 0;
             candidates.forEach(c => {
-                if (c.weight < 0.1) c.weight = 0.1; // Mínimo garantizado
+                if (c.weight < 0.1) c.weight = 0.1;
                 totalWeight += c.weight;
             });
 
-            // Selección aleatoria ponderada
             let random = Math.random() * totalWeight;
             for (let c of candidates) {
                 if (random < c.weight) return c;
                 random -= c.weight;
             }
-            return candidates[0]; // Fallback
+            return candidates[0];
         }
 
         function nextMove() {
             if(state !== 'PLAYING') return;
             isHitProcessing = false;
 
-            // QTE Check
-            if (playerHP <= 2 && Math.random() < 0.4) {
-                triggerQTE();
+            // BONUS CHECK (Solo si vida baja y no acabamos de salir de uno)
+            if (playerHP <= 2 && Math.random() < 0.5) {
+                startBonusMode();
                 return;
             }
 
-            // Seleccionar movimiento inteligentemente
-            const next = getNextMove();
+            let dodgeProbability = DODGE_BASE_CHANCE;
+            if (moveHistory[0] && moveHistory[0].type === 'ESQUIVA') dodgeProbability -= 0.30;
+            if (dodgeProbability < 0) dodgeProbability = 0;
+
+            // Decidir tipo primero
+            const type = Math.random() < dodgeProbability ? 'ESQUIVA' : 'GOLPE';
             
-            // Guardar en historial
-            moveHistory.unshift({ type: next.type, side: next.side });
+            // Filtrar candidatos por tipo y aplicar pesos
+            const next = getNextMove(); // Usamos la función ponderada general
+            
+            // Si el tipo decidido era ESQUIVA, forzamos esquiva aunque el peso diga lo contrario (para respetar la probabilidad base global)
+            // O mejor, confiamos en getNextMove pero ajustamos los pesos antes de llamar.
+            // Para simplificar, usaremos el getNextMove tal cual, ya penaliza repeticiones.
+
+            moveHistory.unshift(next); 
             if (moveHistory.length > 3) moveHistory.pop();
 
             currentOrder = next;
@@ -504,6 +468,75 @@
             playTone('voice');
         }
 
+        // --- BONUS MODE (COMBO RECUPERACIÓN) ---
+        function startBonusMode() {
+            state = 'BONUS';
+            bonusQueue = [];
+            // Generar 3 movimientos de golpe aleatorios
+            for(let i=0; i<3; i++) {
+                const move = STRIKE_MOVES[Math.floor(Math.random() * STRIKE_MOVES.length)];
+                bonusQueue.push(move);
+            }
+            bonusIndex = 0;
+            currentOrder = bonusQueue[0];
+            actionStartTime = Date.now(); // Tiempo global para todo el combo
+
+            // UI
+            updatePrompt("¡COMBO!", "RECUPERACIÓN", "yellow");
+            renderBonusUI();
+            document.getElementById('bonus-container').style.display = 'flex';
+            document.getElementById('action-timer-bar').style.display = 'block';
+            playTone('voice');
+        }
+
+        function renderBonusUI() {
+            const container = document.getElementById('bonus-container');
+            container.innerHTML = '';
+            bonusQueue.forEach((move, i) => {
+                const div = document.createElement('div');
+                div.className = 'bonus-item';
+                if (i === bonusIndex) div.classList.add('bonus-active');
+                if (i < bonusIndex) div.classList.add('bonus-done');
+                div.innerText = move.type.substring(0,1) + (move.side === 'IZQUIERDA' ? 'L' : 'R');
+                container.appendChild(div);
+            });
+        }
+
+        function advanceBonus() {
+            bonusIndex++;
+            if(bonusIndex >= bonusQueue.length) {
+                // WIN BONUS
+                playTone('heal');
+                healPlayer(2, "¡SALUD RESTAURADA!");
+                score += 3; // Daño extra al boss
+                updateUI();
+                
+                endBonus();
+            } else {
+                playTone('hit');
+                currentOrder = bonusQueue[bonusIndex];
+                renderBonusUI();
+                isHitProcessing = false; // Permitir siguiente golpe inmediato
+            }
+        }
+
+        function failBonus() {
+            playTone('error');
+            const mainAction = document.getElementById('main-action');
+            mainAction.innerText = "¡TIEMPO!";
+            mainAction.style.color = "red";
+            endBonus();
+        }
+
+        function endBonus() {
+            document.getElementById('bonus-container').style.display = 'none';
+            document.getElementById('action-timer-bar').style.display = 'none';
+            state = 'PLAYING';
+            // Pausa larga tras bonus
+            setTimeout(nextMove, 2000);
+        }
+
+        // --- PROCESAMIENTO FÍSICO ---
         function processGameplay(kp) {
             if (punchCooldown > 0) punchCooldown--;
 
@@ -543,9 +576,11 @@
             let detectedMove = null;
             let detectedSide = null;
 
-            // 1. PRIORIDAD: ESQUIVA (Si la cabeza baja)
-            // Umbral: 40px debajo de hombros
-            if (punchCooldown === 0 && nose.y > (refPoints.shoulderY + 40)) {
+            // 1. ESQUIVA (ADAPTATIVA: Porcentaje del ancho de hombros)
+            // Detectamos si la nariz baja un 15% del ancho de hombros respecto a la referencia
+            // Esto ajusta la dificultad según la distancia a la cámara
+            const squatThreshold = refPoints.shoulderWidth * 0.15; 
+            if (punchCooldown === 0 && nose.y > (refPoints.shoulderY + squatThreshold)) {
                 const centerX = (lS.x + rS.x) / 2;
                 const dx = nose.x - centerX;
                 detectedMove = 'ESQUIVA';
@@ -555,7 +590,7 @@
                 else detectedSide = 'CENTRO'; 
             }
             
-            // 2. SOLO SI NO HAY ESQUIVA: DETECTAR GOLPES
+            // 2. GOLPES (Solo si no esquiva)
             if (!detectedMove) {
                 // JAB
                 if (vxL > punchThreshold && userLeftWrist.y < (refPoints.shoulderY + 60)) { detectedMove = 'JAB'; detectedSide = 'IZQUIERDA'; }
@@ -580,22 +615,31 @@
                 if (isCorrectType && isCorrectSide) {
                     isHitProcessing = true;
                     lastProcessTime = Date.now();
-                    playTone('hit');
-                    score++;
-                    streakCount++;
                     
-                    if(streakCount > 0 && streakCount % 5 === 0) healPlayer(1, "RACHA: +1 HP");
-
-                    updateUI();
-                    const mainAction = document.getElementById('main-action');
-                    mainAction.style.transform = "scale(1.5)";
-                    mainAction.style.color = "#0f0"; 
-                    
-                    if(score >= TOTAL_MOVES) setTimeout(doWin, 500);
-                    else setTimeout(resetRound, 200);
+                    if (state === 'BONUS') {
+                        advanceBonus();
+                    } else {
+                        // NORMAL PLAY
+                        playTone('hit');
+                        score++;
+                        updateUI();
+                        
+                        const mainAction = document.getElementById('main-action');
+                        mainAction.style.transform = "scale(1.5)";
+                        mainAction.style.color = "#0f0"; 
+                        
+                        if(score >= TOTAL_MOVES) setTimeout(doWin, 500);
+                        else setTimeout(resetRound, 200);
+                    }
 
                 } else {
-                    handleMiss();
+                    // Si falla en Bonus, no penaliza, solo acaba
+                    if (state === 'BONUS') {
+                        // Opcional: Podríamos ser permisivos y no fallar el bonus por un movimiento erróneo, 
+                        // solo por tiempo. De momento, dejémoslo solo por tiempo para ser amables.
+                    } else {
+                        handleMiss();
+                    }
                 }
             }
         }
@@ -606,7 +650,6 @@
             lastProcessTime = Date.now();
             playTone('error');
             
-            streakCount = 0; 
             playerHP--;
             updatePlayerHP();
             
@@ -634,18 +677,13 @@
                 setTimeout(() => document.getElementById('ui-layer').classList.remove('heal-effect'), 500);
                 
                 const sub = document.getElementById('sub-action');
-                
-                // Clear any existing timeout to prevent overwrite
                 if(uiTimeout) clearTimeout(uiTimeout);
                 
                 const prevText = sub.innerText;
-                const prevColor = sub.style.color;
-                
                 sub.innerText = msg;
                 sub.style.color = "#0f0";
                 
-                // Set timeout only if we are not moving to next round immediately
-                // Note: The prompt will be fully reset by resetRound anyway, so this is just for immediate feedback
+                // No restauramos texto antiguo porque resetRound lo hará
             }
         }
 
@@ -658,12 +696,7 @@
             document.getElementById('sub-action').innerText = "";
             document.getElementById('action-timer-bar').style.display = 'none';
             
-            // Clear any lingering UI timeouts
             if(uiTimeout) clearTimeout(uiTimeout);
-            
-            // Pausa adaptativa: Si hubo curación, esperamos más
-            // Si venimos de un QTE exitoso, ya esperamos 2000ms antes de llamar aquí.
-            // Para el flujo normal, usamos 600ms.
             setTimeout(nextMove, 600);
         }
 
@@ -675,8 +708,6 @@
             s.innerText = sub;
             m.style.color = color;
             m.style.transform = "scale(1)";
-            
-            // Reset sub color always
             s.style.color = "#fff";
         }
 
